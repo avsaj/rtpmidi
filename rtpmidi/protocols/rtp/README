@@ -1,0 +1,118 @@
+How to use RTP to stream data:
+
+Class you have to know:
+
+RTPControl: manage several RTP session
+RTPSession: prototype of an RTP session
+
+In order to create a stream, create a class which inherited from RTPSession
+This class will be the interface between your device in and/or out and the network.
+
+The MIDI example:
+Imagine you have your MidiIn class which is reading data from a MIDI device,
+and a MidiOut class which is writting data on a MIDI device.
+
+Let's called our session MidiSession.
+
+There are some mandatory method to add to our session:
+incoming_rtp: This function will be called by the RTP protocol when a packet is received
+start: If you have some things to launch (for example a polling), you have to put it here.
+stop: Stop the things launched
+drop_call: Called by RTP protocol when something wrong append to the connection (timeout, network error, ...)
+
+Your session MUST have a sending port and/or a receiving port. But at least one of them.
+payload and host has to be specify at the initialization of the session (they are mandatory).
+
+Some others var can be set at this time like the jitter buffer size of the RTP and the tool name that will
+be stream in RTCP (is used to identify a source).
+
+midi_session.py:
+
+TOOLNAME = "ExampleStream"
+PAYLOAD = 96
+
+class MidiSession(RTPSession):
+    """Control rtp for midi payload
+    """
+    def __init__(self, peer_address, sending_port=0, receiving_port=0, jitter_buffer_size=10):
+        #Init mother class
+        RTPSession.__init__(self, peer_address, sending_port, receiving_port, PAYLOAD, jitter_buffer_size, TOOL_NAME)
+
+    def start(self):
+        #start your stuff
+        self.midi_in.start()
+
+    def stop(self):
+    	#stop your stuff
+    	self.midi_in.stop()
+
+    def incoming_rtp(self, cookie, timestamp, packet,
+                     read_recovery_journal=0):
+
+        pass
+
+
+The incoming function:
+
+cookie: Own cookie
+timestamp: Timestamp of the packet
+packet: Content of the packet
+read_recovery_journal: Is set to one if the previous packet has been lost else 0.
+
+A send function could also be helpfull !
+Here is how to call the send data function of RTPControl:
+
+def send_data(self, data, time):
+	#encrypt your data has you which to received them
+	chunk = encrypt(data)
+	#Normalize your time has you which to received it
+	ts = normalize(time)
+
+	#Send the data
+	RTPSession.send_data(self, chunk, ts)
+
+
+Our class MidiSession has to be able to manage MidiIn and MidiOut,
+at least to list MIDI devices and set them.
+
+What is the link between MidiSession and MidiOut ?
+MidiSession send data to MidiOut buffer,
+MidiSession set latency of MidiOut class.
+
+What is the link between MidiSession and MidiIn ?
+MidiIn send data to MidiSession
+
+Once your custom session is created we have to integrate it to the streaming process.
+
+RTPControl is managing all RTP sessions of the software,
+here is how to initialize it and register our session in it.
+
+#Init RTPControl
+rtp_control = RTPControl()
+
+#Create midi_session
+midi_session = MidiSession(our_params)
+
+#Register the session
+cookie_session = rtp_control.add_session(midi_session)
+
+#start the session
+rtp_control.start_session(cookie_session)
+
+#Or start all session
+#rtp_control.start()
+
+#stop the session
+rtp_control.stop_session(cookie_session)
+
+#Or stop all session
+#rtp_control.stop()
+
+Note that RTPControl is a singleton.
+
+You can retreive you session object with your cookie like that:
+midi_session = rtp_control.get_session(midi_session)
+
+Then you can acces your session like an object.
+
+Now you know how to use this little library. Have fun!
